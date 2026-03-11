@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>格價 Manager | Price Comparison</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;700;900&display=swap');
+
+        :root {
+            --accent: #000;
+            --bg: #fff;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f4f4;
+            color: #000;
+        }
+
+        .mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* "No AI Feel" - Brutalist UI Elements */
+        .brutalist-card {
+            background: white;
+            border: 2px solid #000;
+            box-shadow: 4px 4px 0px #000;
+            transition: all 0.1s ease;
+        }
+
+        .brutalist-card:hover {
+            box-shadow: 6px 6px 0px #000;
+            transform: translate(-2px, -2px);
+        }
+
+        .brutalist-input {
+            border: 2px solid #000;
+            padding: 10px;
+            width: 100%;
+            outline: none;
+        }
+
+        .brutalist-input:focus {
+            background-color: #f0f0f0;
+        }
+
+        .brutalist-btn {
+            background: #000;
+            color: #fff;
+            padding: 10px 20px;
+            border: 2px solid #000;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.1s;
+        }
+
+        .brutalist-btn:active {
+            box-shadow: none;
+            transform: translate(2px, 2px);
+        }
+
+        .delete-btn {
+            background: #ff4d4d;
+            border: 2px solid #000;
+        }
+
+        .image-preview-box {
+            width: 100%;
+            height: 200px;
+            border: 2px dashed #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #fafafa;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .image-preview-box img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #000; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto">
+        <header class="mb-12 border-b-4 border-black pb-4 flex justify-between items-end">
+            <div>
+                <h1 class="text-4xl font-black uppercase tracking-tighter">格價.LIST</h1>
+                <p class="mono text-sm uppercase">Price Comparison & Plan Management Tool</p>
+            </div>
+            <div id="stats" class="mono text-xs font-bold text-right hidden md:block">
+                ITEMS: <span id="item-count">0</span> | LAST UPDATED: <span id="last-update">-</span>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- LEFT: Editor Panel -->
+            <aside class="lg:col-span-4">
+                <div class="brutalist-card p-6 sticky top-8">
+                    <h2 class="text-xl font-bold mb-4 uppercase italic">Add New Plan</h2>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="mono text-xs font-bold uppercase block mb-1">Product/Plan Name</label>
+                            <input type="text" id="planName" class="brutalist-input" placeholder="e.g. Premium Plan">
+                        </div>
+
+                        <div>
+                            <label class="mono text-xs font-bold uppercase block mb-1">Price (with currency)</label>
+                            <input type="text" id="planPrice" class="brutalist-input" placeholder="HK$ 499">
+                        </div>
+
+                        <div>
+                            <label class="mono text-xs font-bold uppercase block mb-1">Cover Image</label>
+                            <div class="image-preview-box" id="dropZone" onclick="document.getElementById('fileInput').click()">
+                                <span id="placeholderText" class="mono text-xs uppercase text-gray-400">Click to upload</span>
+                                <img id="previewImage" class="hidden">
+                            </div>
+                            <input type="file" id="fileInput" class="hidden" accept="image/*">
+                        </div>
+
+                        <div>
+                            <label class="mono text-xs font-bold uppercase block mb-1">Perks (Press Enter to add)</label>
+                            <div id="perksContainer" class="space-y-2 mb-2">
+                                <!-- Perk inputs appear here -->
+                            </div>
+                            <button onclick="addPerkRow('')" class="text-xs font-bold uppercase underline hover:no-underline">+ Add Perk Line</button>
+                        </div>
+
+                        <button onclick="savePlan()" class="brutalist-btn w-full mt-4 text-center uppercase tracking-widest">
+                            Commit to List
+                        </button>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- RIGHT: Comparison Display -->
+            <main class="lg:col-span-8">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6" id="plansGrid">
+                    <!-- Cards injected here -->
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        let plans = JSON.parse(localStorage.getItem('pricing_plans')) || [];
+        let currentImageBase64 = null;
+
+        const fileInput = document.getElementById('fileInput');
+        const previewImage = document.getElementById('previewImage');
+        const placeholderText = document.getElementById('placeholderText');
+        const perksContainer = document.getElementById('perksContainer');
+
+        // Handle Image Upload
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    currentImageBase64 = event.target.result;
+                    previewImage.src = currentImageBase64;
+                    previewImage.classList.remove('hidden');
+                    placeholderText.classList.add('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        function addPerkRow(val) {
+            const div = document.createElement('div');
+            div.className = 'flex gap-2';
+            div.innerHTML = `
+                <input type="text" class="brutalist-input perk-input text-sm" value="${val}" placeholder="Enter perk...">
+                <button onclick="this.parentElement.remove()" class="px-2 font-bold border-2 border-black">×</button>
+            `;
+            perksContainer.appendChild(div);
+        }
+
+        function savePlan() {
+            const name = document.getElementById('planName').value;
+            const price = document.getElementById('planPrice').value;
+            const perkInputs = document.querySelectorAll('.perk-input');
+            const perks = Array.from(perkInputs).map(i => i.value).filter(v => v.trim() !== '');
+
+            if (!name || !price) {
+                alert("Please fill in Name and Price");
+                return;
+            }
+
+            const newPlan = {
+                id: Date.now(),
+                name,
+                price,
+                image: currentImageBase64,
+                perks,
+                timestamp: new Date().toLocaleString()
+            };
+
+            plans.push(newPlan);
+            render();
+            resetForm();
+        }
+
+        function deletePlan(id) {
+            plans = plans.filter(p => p.id !== id);
+            render();
+        }
+
+        function resetForm() {
+            document.getElementById('planName').value = '';
+            document.getElementById('planPrice').value = '';
+            currentImageBase64 = null;
+            previewImage.classList.add('hidden');
+            placeholderText.classList.remove('hidden');
+            perksContainer.innerHTML = '';
+            addPerkRow('');
+        }
+
+        function render() {
+            localStorage.setItem('pricing_plans', JSON.stringify(plans));
+            const grid = document.getElementById('plansGrid');
+            const count = document.getElementById('item-count');
+            const updateTime = document.getElementById('last-update');
+            
+            grid.innerHTML = '';
+            count.innerText = plans.length;
+            updateTime.innerText = plans.length > 0 ? plans[plans.length-1].timestamp : '-';
+
+            plans.forEach(plan => {
+                const card = document.createElement('div');
+                card.className = 'brutalist-card flex flex-col h-full';
+                card.innerHTML = `
+                    <div class="h-48 bg-black overflow-hidden relative">
+                        ${plan.image ? `<img src="${plan.image}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center text-white mono text-xs uppercase">No Image</div>`}
+                        <button onclick="deletePlan(${plan.id})" class="absolute top-2 right-2 brutalist-btn delete-btn p-1 text-xs">DELETE</button>
+                    </div>
+                    <div class="p-5 flex-grow border-t-2 border-black">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="text-2xl font-black uppercase leading-tight">${plan.name}</h3>
+                        </div>
+                        <div class="mono text-2xl font-bold bg-yellow-300 inline-block px-2 mb-6 border border-black">${plan.price}</div>
+                        
+                        <div class="space-y-2">
+                            <p class="mono text-[10px] font-bold uppercase opacity-50">Included Perks:</p>
+                            ${plan.perks.map(p => `
+                                <div class="flex items-start gap-2 text-sm">
+                                    <span class="font-bold">[✓]</span>
+                                    <span>${p}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    <div class="p-5 border-t-2 border-black bg-black text-white text-center font-bold mono text-xs uppercase tracking-widest cursor-pointer hover:bg-gray-800">
+                        Select Plan
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // Initialize with one perk row
+        addPerkRow('');
+        render();
+    </script>
+</body>
+</html>
